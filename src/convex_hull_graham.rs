@@ -7,41 +7,6 @@ use std::cmp::Ordering::Equal;
 
 use crate::Point2D;
 
-// helper functions
-#[allow(dead_code)]
-/// Returns `true` if two values differ by no more than `tol`.
-fn within_tolerance(p: f64, q: f64, tol: f64) -> bool {
-    (p - q).abs() <= tol
-}
-
-#[allow(dead_code)]
-/// Returns `true` if three 2D points are collinear within floating-point tolerance.
-///
-/// Compares slopes of segments pq and qr using a tolerance of 1e-12 to handle
-/// floating-point rounding error.
-fn are_collinear(p: Point2D, q: Point2D, r: Point2D) -> bool {
-    let slope12 = (q.y - p.y) / (q.x - p.x);
-    let slope23 = (r.y - q.y) / (r.x - q.x);
-    within_tolerance(slope12, slope23, 1e-12)
-}
-
-#[allow(dead_code)]
-/// Removes collinear interior points from a sorted point sequence in place.
-///
-/// For each consecutive triple a → b → c, removes b if the three points are
-/// collinear. Assumes `points` is sorted so that the collinear point is always
-/// the middle element of the triple.
-fn remove_collinear_points(points: &mut Vec<Point2D>) {
-    let mut i = 0;
-    while i + 2 < points.len() {
-        if are_collinear(points[i], points[i + 1], points[i + 2]) {
-            points.remove(i + 1);
-        } else {
-            i += 1;
-        }
-    }
-}
-
 /// Sorts points by polar angle relative to `min`, breaking ties by distance.
 ///
 /// Returns a new vector ordered counter-clockwise from `min`, with closer
@@ -72,8 +37,14 @@ fn cross_z(p: Point2D, q: Point2D, r: Point2D) -> f64 {
 /// Computes the convex hull of a 2D point set using the Graham Scan algorithm.
 ///
 /// Returns hull vertices in counter-clockwise order, starting from the point
-/// with the lowest y-coordinate (x-coordinate breaks ties). Returns an empty
-/// vector when `pts` is empty.
+/// with the lowest y-coordinate (x-coordinate breaks ties). Returns the input
+/// as-is when given fewer than three points (there is no polygon to compute).
+///
+/// Collinear points lying on a hull edge are **excluded** — only the segment
+/// endpoints are reported as vertices, matching the canonical definition of a
+/// convex hull. This falls out of the orientation test: a point that turns
+/// clockwise *or* runs straight (collinear) relative to the current edge is
+/// popped from the hull.
 ///
 /// # Examples
 ///
@@ -94,12 +65,15 @@ fn cross_z(p: Point2D, q: Point2D, r: Point2D) -> f64 {
 /// ]);
 /// ```
 pub fn convex_hull_graham(pts: &[Point2D]) -> Vec<Point2D> {
-    if pts.is_empty() {
-        return vec![];
+    // With fewer than three points there is no polygon to compute; the hull is
+    // just the input set.
+    if pts.len() < 3 {
+        return pts.to_vec();
     }
 
-    let mut stack: Vec<Point2D> = vec![];
-    let &min = pts
+    // The lowest point (ties broken by smallest x) is guaranteed to be a hull
+    // vertex; it anchors the angular sort.
+    let &anchor = pts
         .iter()
         .min_by(|a, b| {
             let ord = a.y.partial_cmp(&b.y).unwrap_or(Equal);
@@ -109,128 +83,27 @@ pub fn convex_hull_graham(pts: &[Point2D]) -> Vec<Point2D> {
             }
         })
         .unwrap();
-    let points = sort_by_min_angle(pts, min);
+    let sorted = sort_by_min_angle(pts, anchor);
 
-    if points.len() <= 3 {
-        return points;
-    }
-
-    for point in points {
-        while stack.len() > 1
-            && cross_z(stack[stack.len() - 2], stack[stack.len() - 1], point) < 0.0
+    // Graham scan. Popping on `cross_z <= 0.0` discards any point that makes a
+    // clockwise turn or is collinear with the current edge, so collinear
+    // interior-of-edge points never survive on the hull.
+    let mut hull: Vec<Point2D> = Vec::with_capacity(sorted.len());
+    for point in sorted {
+        while hull.len() >= 2
+            && cross_z(hull[hull.len() - 2], hull[hull.len() - 1], point) <= 0.0
         {
-            stack.pop();
+            hull.pop();
         }
-        stack.push(point);
+        hull.push(point);
     }
 
-    stack
+    hull
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // --- within_tolerance ---
-
-    #[test]
-    fn test_within_tolerance_equal() {
-        assert!(within_tolerance(1.0, 1.0, 1e-12));
-    }
-
-    #[test]
-    fn test_within_tolerance_inside() {
-        assert!(within_tolerance(1.0, 1.0 + 1e-13, 1e-12));
-    }
-
-    #[test]
-    fn test_within_tolerance_near_boundary() {
-        // 0.5e-12 is well inside the 1e-12 tolerance without hitting f64 rounding
-        assert!(within_tolerance(1.0, 1.0 + 0.5e-12, 1e-12));
-    }
-
-    #[test]
-    fn test_within_tolerance_outside() {
-        assert!(!within_tolerance(1.0, 2.0, 1e-12));
-    }
-
-    // --- are_collinear ---
-
-    #[test]
-    fn test_are_collinear_diagonal() {
-        assert!(are_collinear(
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 1.0 },
-            Point2D { x: 2.0, y: 2.0 },
-        ));
-    }
-
-    #[test]
-    fn test_are_collinear_horizontal() {
-        assert!(are_collinear(
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 0.0 },
-            Point2D { x: 2.0, y: 0.0 },
-        ));
-    }
-
-    #[test]
-    fn test_are_collinear_false() {
-        assert!(!are_collinear(
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 0.0 },
-            Point2D { x: 0.0, y: 1.0 },
-        ));
-    }
-
-    // --- remove_collinear_points ---
-
-    #[test]
-    fn test_remove_collinear_points_removes_middle() {
-        let mut pts = vec![
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 1.0 },
-            Point2D { x: 2.0, y: 2.0 },
-        ];
-        remove_collinear_points(&mut pts);
-        assert_eq!(
-            pts,
-            vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 2.0, y: 2.0 }]
-        );
-    }
-
-    #[test]
-    fn test_remove_collinear_points_chain() {
-        let mut pts = vec![
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 1.0 },
-            Point2D { x: 2.0, y: 2.0 },
-            Point2D { x: 3.0, y: 3.0 },
-        ];
-        remove_collinear_points(&mut pts);
-        assert_eq!(
-            pts,
-            vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 3.0, y: 3.0 }]
-        );
-    }
-
-    #[test]
-    fn test_remove_collinear_points_no_change() {
-        let mut pts = vec![
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 0.0 },
-            Point2D { x: 0.0, y: 1.0 },
-        ];
-        remove_collinear_points(&mut pts);
-        assert_eq!(
-            pts,
-            vec![
-                Point2D { x: 0.0, y: 0.0 },
-                Point2D { x: 1.0, y: 0.0 },
-                Point2D { x: 0.0, y: 1.0 },
-            ]
-        );
-    }
 
     // --- sort_by_min_angle ---
 
@@ -311,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hull_three_points_returned_as_is() {
+    fn test_hull_triangle_keeps_all_vertices() {
         let pts = [
             Point2D { x: 0.0, y: 0.0 },
             Point2D { x: 1.0, y: 0.0 },
@@ -352,5 +225,77 @@ mod tests {
         let hull = convex_hull_graham(&pts);
         assert_eq!(hull.len(), 4);
         assert!(!hull.contains(&Point2D { x: 0.5, y: 0.5 }));
+    }
+
+    /// Collinear points lying *on* a hull edge are excluded — only the segment
+    /// endpoints are reported, per the canonical convex hull definition. This
+    /// relies on the non-strict orientation test (`cross_z <= 0.0`).
+    #[test]
+    fn test_hull_excludes_collinear_edge_points() {
+        // Square with two extra points, (1,0) and (2,0), lying strictly between
+        // the bottom-edge corners (0,0) and (4,0).
+        let pts = [
+            Point2D { x: 0.0, y: 0.0 },
+            Point2D { x: 1.0, y: 0.0 },
+            Point2D { x: 2.0, y: 0.0 },
+            Point2D { x: 4.0, y: 0.0 },
+            Point2D { x: 4.0, y: 4.0 },
+            Point2D { x: 0.0, y: 4.0 },
+        ];
+        let hull = convex_hull_graham(&pts);
+
+        // Only the four true corners remain.
+        assert_eq!(
+            hull,
+            vec![
+                Point2D { x: 0.0, y: 0.0 },
+                Point2D { x: 4.0, y: 0.0 },
+                Point2D { x: 4.0, y: 4.0 },
+                Point2D { x: 0.0, y: 4.0 },
+            ]
+        );
+        assert!(!hull.contains(&Point2D { x: 1.0, y: 0.0 }));
+        assert!(!hull.contains(&Point2D { x: 2.0, y: 0.0 }));
+    }
+
+    /// Collinear points on the final edge (the one closing back to the anchor)
+    /// are the classic Graham-scan failure case; verify they are excluded too.
+    #[test]
+    fn test_hull_excludes_collinear_on_closing_edge() {
+        // Right triangle with three collinear points on the left edge, which is
+        // the last edge processed before the scan returns to the anchor.
+        let pts = [
+            Point2D { x: 0.0, y: 0.0 },
+            Point2D { x: 4.0, y: 0.0 },
+            Point2D { x: 0.0, y: 1.0 },
+            Point2D { x: 0.0, y: 2.0 },
+            Point2D { x: 0.0, y: 3.0 },
+            Point2D { x: 0.0, y: 4.0 },
+        ];
+        let hull = convex_hull_graham(&pts);
+        assert_eq!(
+            hull,
+            vec![
+                Point2D { x: 0.0, y: 0.0 },
+                Point2D { x: 4.0, y: 0.0 },
+                Point2D { x: 0.0, y: 4.0 },
+            ]
+        );
+    }
+
+    /// Three or more collinear points have no enclosed area; the hull collapses
+    /// to the two extreme endpoints.
+    #[test]
+    fn test_hull_all_collinear_returns_endpoints() {
+        let pts = [
+            Point2D { x: 0.0, y: 0.0 },
+            Point2D { x: 1.0, y: 0.0 },
+            Point2D { x: 2.0, y: 0.0 },
+            Point2D { x: 3.0, y: 0.0 },
+        ];
+        assert_eq!(
+            convex_hull_graham(&pts),
+            vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 3.0, y: 0.0 }]
+        );
     }
 }
