@@ -127,9 +127,6 @@ pub fn convex_hull_graham(pts: &[Point2D]) -> Vec<Point2D> {
     stack
 }
 
-// TODO: is there a better way to structure this? pure functions, structs, or even traits? For example Point2D {x,y}, Segment {Point2D, Point2D}
-// elaborate on the purpose of the cross product
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,7 +193,10 @@ mod tests {
             Point2D { x: 2.0, y: 2.0 },
         ];
         remove_collinear_points(&mut pts);
-        assert_eq!(pts, vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 2.0, y: 2.0 }]);
+        assert_eq!(
+            pts,
+            vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 2.0, y: 2.0 }]
+        );
     }
 
     #[test]
@@ -208,7 +208,10 @@ mod tests {
             Point2D { x: 3.0, y: 3.0 },
         ];
         remove_collinear_points(&mut pts);
-        assert_eq!(pts, vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 3.0, y: 3.0 }]);
+        assert_eq!(
+            pts,
+            vec![Point2D { x: 0.0, y: 0.0 }, Point2D { x: 3.0, y: 3.0 }]
+        );
     }
 
     #[test]
@@ -219,11 +222,14 @@ mod tests {
             Point2D { x: 0.0, y: 1.0 },
         ];
         remove_collinear_points(&mut pts);
-        assert_eq!(pts, vec![
-            Point2D { x: 0.0, y: 0.0 },
-            Point2D { x: 1.0, y: 0.0 },
-            Point2D { x: 0.0, y: 1.0 },
-        ]);
+        assert_eq!(
+            pts,
+            vec![
+                Point2D { x: 0.0, y: 0.0 },
+                Point2D { x: 1.0, y: 0.0 },
+                Point2D { x: 0.0, y: 1.0 },
+            ]
+        );
     }
 
     // --- sort_by_min_angle ---
@@ -238,11 +244,14 @@ mod tests {
             Point2D { x: 1.0, y: 0.0 },
         ];
         let sorted = sort_by_min_angle(&pts, min);
-        assert_eq!(sorted, vec![
-            Point2D { x: 1.0, y: 0.0 },
-            Point2D { x: 1.0, y: 1.0 },
-            Point2D { x: 0.0, y: 1.0 },
-        ]);
+        assert_eq!(
+            sorted,
+            vec![
+                Point2D { x: 1.0, y: 0.0 },
+                Point2D { x: 1.0, y: 1.0 },
+                Point2D { x: 0.0, y: 1.0 },
+            ]
+        );
     }
 
     #[test]
@@ -250,7 +259,10 @@ mod tests {
         let min = Point2D { x: 0.0, y: 0.0 };
         let pts = [Point2D { x: 2.0, y: 0.0 }, Point2D { x: 1.0, y: 0.0 }];
         let sorted = sort_by_min_angle(&pts, min);
-        assert_eq!(sorted, vec![Point2D { x: 1.0, y: 0.0 }, Point2D { x: 2.0, y: 0.0 }]);
+        assert_eq!(
+            sorted,
+            vec![Point2D { x: 1.0, y: 0.0 }, Point2D { x: 2.0, y: 0.0 }]
+        );
     }
 
     // --- cross_z ---
@@ -312,16 +324,19 @@ mod tests {
     fn test_hull_excludes_interior_point() {
         let pts = [
             Point2D { x: -1.0, y: -10.0 },
-            Point2D { x:  0.0, y:   0.0 },
-            Point2D { x: -3.0, y:   5.0 },
-            Point2D { x:  6.0, y:   1.0 },
+            Point2D { x: 0.0, y: 0.0 },
+            Point2D { x: -3.0, y: 5.0 },
+            Point2D { x: 6.0, y: 1.0 },
         ];
         let hull = convex_hull_graham(&pts);
-        assert_eq!(hull, vec![
-            Point2D { x: -1.0, y: -10.0 },
-            Point2D { x:  6.0, y:   1.0 },
-            Point2D { x: -3.0, y:   5.0 },
-        ]);
+        assert_eq!(
+            hull,
+            vec![
+                Point2D { x: -1.0, y: -10.0 },
+                Point2D { x: 6.0, y: 1.0 },
+                Point2D { x: -3.0, y: 5.0 },
+            ]
+        );
         assert!(!hull.contains(&Point2D { x: 0.0, y: 0.0 }));
     }
 
