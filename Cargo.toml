@@ -1,0 +1,10 @@
+[package]
+name = "rusty-convex-hull"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[[example]]
+name = "convex_hull_2d"
+path = "examples/convex_hull_2d.rs"
